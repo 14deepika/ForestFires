@@ -1,0 +1,184 @@
+
+---
+
+# Forest Fire Dynamics: Cellular Automata + Machine Learning
+
+This project combines a **Cellular Automata (CA)** approach with a **Machine Learning (ML)** model to predict and simulate forest fire spread. It uses the **`forestfires.csv`** dataset (from the UCI Machine Learning Repository) for training a **RandomForest** classifier. The CA simulation uses the trained model to decide whether a cell ignites when adjacent cells are burning.
+
+## Table of Contents
+1. [Project Structure](#project-structure)
+2. [Dependencies](#dependencies)
+3. [Data](#data)
+4. [How It Works](#how-it-works)
+5. [Usage](#usage)
+   - [1. Install Dependencies](#1-install-dependencies)
+   - [2. Train the Model](#2-train-the-model)
+   - [3. Run the Flask Backend](#3-run-the-flask-backend)
+   - [4. Run the Streamlit Frontend](#4-run-the-streamlit-frontend)
+6. [Notes on Deployment](#notes-on-deployment)
+7. [License](#license)
+
+---
+
+## Project Structure
+
+```
+ForestFireProject/
+├── forestfires.csv           # Dataset
+├── model_training.ipynb      # Jupyter notebook for training the RandomForest model
+├── forest_fire_model.pkl     # Trained ML model (generated after training)
+├── cellular_automata.py      # CA logic for fire spread simulation
+├── app.py                    # Flask backend (exposes /predict and /simulate endpoints)
+├── frontend.py               # Streamlit frontend for user interaction
+└── requirements.txt          # List of Python dependencies
+```
+
+**Key Files:**
+
+- **`forestfires.csv`**: Dataset containing features like `X, Y, month, day, FFMC, DMC, DC, ISI, temp, RH, wind, rain, area`.
+- **`model_training.ipynb`**: Loads the dataset, converts `month`/`day` to numeric, creates a binary target (`fire` = 1 if `area > 0`, else 0), trains a **RandomForestClassifier**, and saves the model as `forest_fire_model.pkl`.
+- **`cellular_automata.py`**: Implements a simple CA with states: `0 = unburned`, `1 = burning`, `2 = burned`. Uses the trained ML model to determine ignition probability for unburned cells adjacent to burning cells.
+- **`app.py`**: **Flask** application with two endpoints:
+  - `POST /predict` for single-cell fire risk prediction.
+  - `POST /simulate` to run the CA simulation.
+- **`frontend.py`**: **Streamlit** interface allowing:
+  - Single-cell risk prediction (displays “Safe” or “ALERT”).
+  - CA simulation visualization (color-coded grid).
+- **`requirements.txt`**: Python dependencies.
+
+---
+
+## Dependencies
+
+Below are the core dependencies; exact versions may vary. If you see warnings about version mismatches, you may need to align **scikit-learn** versions between training and inference.
+
+```
+flask
+joblib
+numpy
+scikit-learn
+pandas
+streamlit
+plotly
+```
+
+---
+
+## Data
+
+- **`forestfires.csv`**: A dataset from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/Forest+Fires).  
+- Columns include: `X, Y, month, day, FFMC, DMC, DC, ISI, temp, RH, wind, rain, area`.  
+- In this project, `area` is used to derive a binary classification target: `fire = 1 if area > 0 else 0`.
+
+---
+
+## How It Works
+
+1. **Model Training**  
+   - We convert `month` and `day` strings to numeric values.  
+   - Create a target column `fire` indicating whether a fire actually burned (`area > 0`).  
+   - Train a **RandomForestClassifier** on features `[X, Y, month, day, FFMC, DMC, DC, ISI, temp, RH, wind, rain]`.
+
+2. **Single-Cell Prediction**  
+   - The **Flask** endpoint `/predict` takes a JSON of 12 features, runs the model, and returns:
+     ```json
+     {
+       "fire_risk_class": 0 or 1,
+       "fire_risk_prob": <float probability>
+     }
+     ```
+   - The **Streamlit** UI displays “Safe” if `fire_risk_prob < 0.5` or “ALERT” if `fire_risk_prob >= 0.5`.
+
+3. **Cellular Automata Simulation**  
+   - A 2D grid of size `(rows x cols)` is initialized; the center cell starts as burning (`1`).  
+   - For each simulation step:
+     1. If a cell is unburned (`0`) and has any burning neighbor, we call the ML model to decide if it ignites.
+     2. Burning cells (`1`) become burned (`2`).  
+   - After a specified number of steps, the final grid is returned and displayed as a **color-coded** matrix:  
+     - `0` = Green (unburned)  
+     - `1` = Red (burning)  
+     - `2` = Black (burned)
+
+---
+
+## Usage
+
+### 1. Install Dependencies
+
+Make sure you have Python 3.7+ installed. Then run:
+
+```bash
+pip install -r requirements.txt
+```
+Or with conda:
+```bash
+conda install --file requirements.txt
+```
+
+### 2. Train the Model
+
+1. **Open `model_training.ipynb`** in Jupyter or VSCode.  
+2. **Run all cells**. It will:
+   - Load `forestfires.csv`
+   - Preprocess data
+   - Train a **RandomForest**  
+   - Save **`forest_fire_model.pkl`** in the same directory
+
+### 3. Run the Flask Backend
+
+Start the Flask server:
+
+```bash
+python app.py
+```
+
+- By default, it runs on **`http://0.0.0.0:5000`**.  
+- If port 5000 is already in use (e.g., AirPlay on macOS), disable AirPlay or change the port in `app.run(...)`.
+
+### 4. Run the Streamlit Frontend
+
+In a **new terminal** (while the Flask server is still running):
+
+```bash
+streamlit run frontend.py
+```
+
+- By default, it opens in your browser at **`http://localhost:8501`**.
+
+#### **Predict Single Cell**  
+- Navigate to the **“Predict Single Cell”** section.  
+- Enter numeric values for `X, Y, month, day, FFMC, DMC, DC, ISI, temp, RH, wind, rain`.  
+- Click **“Predict Fire Risk.”**  
+- The UI displays:
+  - **Predicted Class** (`0` or `1`)  
+  - **Probability** (between 0 and 1)  
+  - A **Safe** or **ALERT** message based on a 0.5 threshold.
+
+#### **Run CA Simulation**  
+- Go to **“Run CA Simulation”**.  
+- Enter **rows**, **cols**, **steps**, and environment data (month, day, FFMC, etc.).  
+- Click **“Run Simulation.”**  
+- A **color-coded** grid appears, where:
+  - `0` = Green (unburned)  
+  - `1` = Red (burning)  
+  - `2` = Black (burned)
+
+---
+
+## Notes on Deployment
+
+1. **scikit-learn Version**  
+   - Ensure you use the **same** scikit-learn version during training and inference.  
+   - If you see `InconsistentVersionWarning`, either **upgrade** or **retrain** to match.
+
+2. **Port Conflicts**  
+   - If **port 5000** is occupied (often by AirPlay Receiver on macOS), disable AirPlay or change the port in `app.py`.
+
+3. **Production**  
+   - For production, you might deploy the Flask app on a server (e.g., **Gunicorn** + **NGINX**) and host the Streamlit app separately or containerize both in **Docker**.
+
+4. **CA Complexity**  
+   - The provided CA logic is a **basic demonstration**. You can expand it to include slope, vegetation density, wind direction, or more realistic rules for spreading.
+
+---
+
